@@ -1,23 +1,245 @@
 N30 FreightGuard
+O que é o FreightGuard?
 
-Este projeto é um motor de decisão para operações de frete. Ele não é apenas uma API nem apenas uma interface visual: ele é um produto que responde a uma pergunta concreta do mundo real — dado um frete agora, com uma origem, um destino, um SLA e um contexto climático, essa operação deve ser autorizada, autorizada com custo adicional ou bloqueada?
+O FreightGuard é um motor de decisão para operações de frete. Ele responde a uma pergunta concreta do mundo real:
 
-O FreightGuard foi pensado para tornar explícito algo que normalmente fica implícito em sistemas de logística: decisões têm custo, decisões dependem de contexto externo e decisões precisam ser explicáveis depois que já foram tomadas. Aqui, nenhuma decisão acontece de forma síncrona na API ou na UI. A API apenas aceita comandos. A interface apenas observa. O poder de decidir está concentrado em um worker assíncrono.
+Dado um frete agora, com origem, destino, SLA, valor de carga e clima real, essa operação deve ser autorizada, autorizada com custo adicional ou bloqueada?
 
-Do ponto de vista de produto, o fluxo é simples de entender. O usuário abre a interface, clica no mapa para definir origem e destino e envia a operação. A API aceita o comando, mas não decide nada naquele momento. Em segundo plano, o worker processa a operação, consulta clima real usando OpenWeatherMap, aplica regras de risco e orçamento e grava uma decisão definitiva. Essa decisão é persistida junto com o clima utilizado, data, custo e orçamento restante. A interface então passa a exibir esse resultado de forma clara e auditável.
+O sistema não é apenas uma API nem apenas uma interface visual. Ele é um produto de decisão, no qual o ato de decidir é tratado como algo explícito, registrável e auditável.
 
-O ponto central do FreightGuard não é apenas a decisão final, mas a capacidade de provar como ela foi produzida. O clima utilizado na decisão não é recalculado depois nem inferido: ele é persistido como evidência. Cada decisão gera um evento em um ledger com encadeamento de hash, o que permite auditoria posterior e recomputação de projeções. A UI mostra exatamente esses dados, sem regras próprias e sem poder de alteração.
+As decisões não acontecem de forma síncrona nem na API nem na UI. O poder de decidir está concentrado em um worker assíncrono, enquanto os demais componentes apenas enviam comandos ou observam resultados.
 
-Arquiteturalmente, o sistema é dividido de forma intencional. A API recebe comandos e expõe apenas projeções de leitura. O worker é o único componente que tem poder de decisão. O banco de dados mantém um ledger imutável e projeções derivadas para leitura rápida. A interface é propositalmente simples e direta, escrita em HTML e JavaScript puro, para maximizar transparência e reduzir camadas desnecessárias. O tamanho do HTML não representa complexidade de frontend, mas sim a superfície necessária para provar o produto funcionando.
+Visão de produto
 
-Esse projeto existe para demonstrar um tipo específico de maturidade: saber separar poder de observação, saber lidar com decisões assíncronas e saber transformar regras abstratas em algo visível e verificável. Ele assume trade-offs conscientemente. Não há autenticação, multi-tenant ou UI sofisticada porque o foco é mostrar o núcleo do problema e sua solução de forma clara. A latência do processamento é aceita em troca de decisões mais seguras e auditáveis.
+Em sistemas logísticos tradicionais, decisões críticas costumam ficar implícitas: regras são aplicadas em código síncrono, o contexto externo muda com o tempo e, depois que a decisão é tomada, torna-se difícil explicar por que ela aconteceu.
 
-Rodar o projeto localmente é simples, mas exige alguns pré-requisitos explícitos. O FreightGuard foi pensado para rodar inteiramente via Docker, sem dependências locais além do Docker e do Docker Compose.
+O FreightGuard foi projetado para inverter essa lógica:
 
-Antes de subir o projeto, é necessário configurar as variáveis de ambiente. O ponto mais importante é a chave da API do OpenWeatherMap, usada pelo worker para buscar o clima real no momento da decisão. Sem essa chave, a stack sobe, mas o worker não consegue decidir operações. No arquivo .env, deve existir a variável OWM_API_KEY com uma chave válida obtida em https://openweathermap.org/api. Esse passo é intencionalmente manual, porque o produto depende de dados externos reais.
+Decisões têm custo explícito
 
-Com a chave configurada, o sistema pode ser iniciado com Docker Compose. O comando sobe a API, o worker, a UI, o banco de dados e os serviços auxiliares definidos no projeto. Após o build inicial, a interface fica disponível no navegador.
+Decisões dependem de contexto externo real (clima)
 
-Depois de subir a stack, o acesso ao produto acontece pela interface web exposta localmente. Não existe login, seed manual ou dados fictícios. Cada operação criada já passa pelo fluxo real de decisão.
+Decisões precisam ser explicáveis depois de tomadas
 
-O uso segue sempre o mesmo padrão. Primeiro, define-se origem e destino clicando no mapa. Em seguida, envia-se a operação com valor de carga, SLA e penalidade. A API apenas confirma o aceite do comando. Alguns segundos depois, o worker processa a operação, consulta o clima real e grava a decisão. A interface passa a exibir a decisão, o clima utilizado, o custo aplicado e o orçamento restante. Clicando sobre a operação, é possível abrir os detalhes completos e visualizar o JSON auditável.
+Aqui, o resultado final importa, mas o processo que levou até ele importa ainda mais.
+
+Fluxo do sistema
+
+Do ponto de vista do usuário, o fluxo é simples e direto:
+
+O usuário abre a interface web
+
+Define origem e destino clicando no mapa
+
+Informa valor da carga, SLA e penalidade
+
+Envia a operação
+
+O que acontece internamente:
+
+A API recebe o comando e apenas o registra
+
+Nenhuma decisão é tomada nesse momento
+
+Um worker assíncrono processa a operação
+
+O worker:
+
+consulta o clima real (OpenWeatherMap)
+
+aplica regras de risco
+
+verifica orçamento disponível
+
+produz uma decisão definitiva
+
+A decisão é persistida com:
+
+clima utilizado
+
+timestamp
+
+custo aplicado
+
+orçamento restante
+
+A interface passa a exibir o resultado de forma clara e auditável
+
+Auditoria e explicabilidade
+
+O ponto central do FreightGuard não é apenas a decisão final, mas a capacidade de provar como ela foi produzida.
+
+O clima utilizado na decisão não é recalculado depois
+
+Ele é persistido como evidência
+
+Cada decisão gera um evento em um ledger imutável
+
+Os eventos são encadeados por hash-chain
+
+Isso permite:
+
+Auditoria posterior
+
+Verificação de integridade
+
+Recomputação de projeções
+
+Análise histórica de decisões
+
+A interface exibe exatamente esses dados. Ela não possui regras próprias nem poder de alteração.
+
+Arquitetura
+
+A separação entre componentes é intencional e explícita. Cada parte do sistema tem um papel bem definido.
+
+API
+
+Recebe comandos de criação de operações
+
+Não contém regras de decisão
+
+Expõe apenas projeções de leitura
+
+Worker assíncrono
+
+Único componente com poder de decisão
+
+Processa operações fora do fluxo síncrono
+
+Consulta clima real
+
+Aplica regras de risco e orçamento
+
+Registra decisões no ledger
+
+Banco de dados
+
+Ledger imutável de eventos
+
+Encadeamento por hash
+
+Projeções derivadas para leitura eficiente
+
+Interface web
+
+Escrita em HTML e JavaScript puro
+
+Não toma decisões
+
+Apenas observa e exibe dados
+
+A simplicidade do frontend é proposital. O foco não é complexidade visual, mas transparência do produto funcionando.
+
+Trade-offs conscientes
+
+Este projeto assume escolhas claras:
+
+Não há autenticação ou multi-tenant
+
+A UI é simples, sem frameworks
+
+A decisão é assíncrona (latência aceita)
+
+O foco está no núcleo do problema, não em features periféricas
+
+Esses trade-offs existem para manter o sistema legível, verificável e fácil de auditar.
+
+Tecnologias principais
+
+Docker / Docker Compose
+
+API backend
+
+Worker assíncrono
+
+Banco relacional com ledger e projeções
+
+OpenWeatherMap (dados climáticos reais)
+
+HTML + JavaScript puro
+
+Como rodar o projeto
+Pré-requisitos
+
+Docker
+
+Docker Compose
+
+Configuração obrigatória
+
+O FreightGuard depende de dados externos reais. Antes de subir a stack, é necessário configurar a chave da API do OpenWeatherMap.
+
+Crie uma conta em: https://openweathermap.org/api
+
+Obtenha uma chave de API
+
+No arquivo .env, defina:
+
+OWM_API_KEY=SUA_CHAVE_AQUI
+
+Sem essa chave, o sistema sobe, mas o worker não consegue decidir operações.
+
+Subindo a stack
+
+Com a variável configurada, basta executar:
+
+docker compose up -d --build
+
+Isso inicia:
+
+API
+
+Worker
+
+Interface web
+
+Banco de dados
+
+Serviços auxiliares
+
+Após o build inicial, a interface fica disponível no navegador.
+
+Uso do sistema
+
+Acesse a interface web
+
+Clique no mapa para definir origem e destino
+
+Preencha os dados da operação
+
+Envie o comando
+
+Aguarde alguns segundos
+
+Observe a decisão aparecer na interface
+
+Cada operação exibida pode ser clicada para visualizar os detalhes completos, incluindo
+
+clima utilizado
+
+decisão
+
+custo
+
+orçamento restante
+
+JSON auditável da projeção
+
+Objetivo do projeto
+
+Este projeto existe para demonstrar um tipo específico de maturidade técnica:
+
+Separar poder de decisão de camadas de observação
+
+Lidar com decisões assíncronas
+
+Integrar dados externos reais de forma segura
+
+Tornar decisões explicáveis e auditáveis
+
+Ele não tenta ser um produto comercial completo. Ele tenta ser honesto sobre o problema que resolve e explícito sobre as escolhas feitas para resolvê-lo.
+
+Status
+
+Projeto funcional, voltado para demonstração arquitetural e de produto.
