@@ -21,5 +21,3 @@ Com a chave configurada, o sistema pode ser iniciado com Docker Compose. O coman
 Depois de subir a stack, o acesso ao produto acontece pela interface web exposta localmente. Não existe login, seed manual ou dados fictícios. Cada operação criada já passa pelo fluxo real de decisão.
 
 O uso segue sempre o mesmo padrão. Primeiro, define-se origem e destino clicando no mapa. Em seguida, envia-se a operação com valor de carga, SLA e penalidade. A API apenas confirma o aceite do comando. Alguns segundos depois, o worker processa a operação, consulta o clima real e grava a decisão. A interface passa a exibir a decisão, o clima utilizado, o custo aplicado e o orçamento restante. Clicando sobre a operação, é possível abrir os detalhes completos e visualizar o JSON auditável.
-
-Como nível técnico, o FreightGuard se posiciona como um projeto de Pleno forte com decisões de arquitetura típicas de Sênior. Ele não tenta impressionar com volume de tecnologia, mas com clareza de modelo, separação de responsabilidades e alinhamento entre produto e sistema.
