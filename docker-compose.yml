@@ -1,0 +1,138 @@
+name: n30-freightguard
+
+networks:
+  n30_freightguard_net:
+    name: n30_freightguard_net
+
+secrets:
+  owm_api_key:
+    file: ./secrets/fb6545a79ed7994892e0a64a3eb33351.txt
+
+services:
+  traefik:
+    image: traefik:v2.11
+    command: ["--configFile=/etc/traefik/traefik.yml"]
+    labels:
+      - "fg.stack=n30-freightguard"
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./letsencrypt:/letsencrypt
+    networks: [n30_freightguard_net]
+
+  postgres:
+    image: postgres:16-alpine
+    labels:
+      - "fg.stack=n30-freightguard"
+    environment:
+      POSTGRES_USER: freight
+      POSTGRES_PASSWORD: freight
+      POSTGRES_DB: freightguard
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U freight -d freightguard"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/sql:/docker-entrypoint-initdb.d:ro
+    networks: [n30_freightguard_net]
+
+  api:
+    build:
+      context: ./services/api
+    labels:
+      - "fg.stack=n30-freightguard"
+      - "traefik.enable=true"
+      - "traefik.http.routers.fg-api.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.fg-api.entrypoints=web"
+      - "traefik.http.middlewares.fg-api-strip.stripprefix.prefixes=/api"
+      - "traefik.http.routers.fg-api.middlewares=fg-api-strip"
+      - "traefik.http.services.fg-api.loadbalancer.server.port=3000"
+    environment:
+      DATABASE_URL: postgres://freight:freight@postgres:5432/freightguard
+      PORT: "3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [n30_freightguard_net]
+
+  worker:
+    build:
+      context: ./services/worker
+    labels:
+      - "fg.stack=n30-freightguard"
+    environment:
+      DATABASE_URL: postgres://freight:freight@postgres:5432/freightguard
+      PORT: "3001"
+      DAILY_BUDGET_TOTAL: "${DAILY_BUDGET_TOTAL}"
+    secrets:
+      - owm_api_key
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [n30_freightguard_net]
+
+  ui:
+    build:
+      context: ./services/ui
+    labels:
+      - "fg.stack=n30-freightguard"
+      - "traefik.enable=true"
+      - "traefik.http.routers.fg-ui.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.fg-ui.entrypoints=web"
+      - "traefik.http.services.fg-ui.loadbalancer.server.port=80"
+    depends_on:
+      - api
+    networks: [n30_freightguard_net]
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    labels:
+      - "fg.stack=n30-freightguard"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks: [n30_freightguard_net]
+
+  loki:
+    image: grafana/loki:2.9.8
+    labels:
+      - "fg.stack=n30-freightguard"
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./infra/loki/loki.yml:/etc/loki/loki.yml:ro
+      - lokidata:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+    networks: [n30_freightguard_net]
+
+  promtail:
+    image: grafana/promtail:2.9.8
+    labels:
+      - "fg.stack=n30-freightguard"
+    command: ["-config.file=/etc/promtail/promtail.yml"]
+    volumes:
+      - ./infra/promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks: [n30_freightguard_net]
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    labels:
+      - "fg.stack=n30-freightguard"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "127.0.0.1:3002:3000"
+    networks: [n30_freightguard_net]
+
+volumes:
+  pgdata:
+  lokidata:

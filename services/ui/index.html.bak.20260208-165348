@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>N30 FreightGuard</title>
+
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+  <style>
+    body { margin:0; font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Arial; background:#0b1020; color:#e8eefc; }
+    header { padding:12px 16px; display:flex; gap:12px; align-items:center; border-bottom:1px solid rgba(255,255,255,.08); }
+    .pill { padding:6px 10px; border:1px solid rgba(255,255,255,.12); border-radius:999px; font-size:12px; opacity:.95; }
+    main { display:grid; grid-template-columns: 440px 1fr; height: calc(100vh - 52px); }
+    .panel { padding:14px; border-right:1px solid rgba(255,255,255,.08); overflow:auto; }
+    .box { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.10); border-radius:12px; padding:12px; margin-bottom:12px; }
+    label { display:block; font-size:12px; opacity:.85; margin-top:10px; }
+    input { width:100%; margin-top:6px; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background:rgba(0,0,0,.25); color:#e8eefc; }
+    button { width:100%; margin-top:10px; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.08); color:#e8eefc; cursor:pointer; }
+    button:hover { background:rgba(255,255,255,.12); }
+    button.secondary { background:rgba(0,0,0,.22); }
+    #map { height:100%; width:100%; }
+    .small { font-size:12px; opacity:.85; line-height:1.35; }
+    .row { display:flex; gap:8px; }
+    .row > div { flex:1; }
+    .tag { display:inline-block; padding:4px 8px; border-radius:999px; border:1px solid rgba(255,255,255,.12); font-size:12px; }
+    .g { color:#8bffb0; border-color: rgba(139,255,176,.35); }
+    .y { color:#ffd48b; border-color: rgba(255,212,139,.35); }
+    .r { color:#ff8ba0; border-color: rgba(255,139,160,.35); }
+    table { width:100%; border-collapse: collapse; font-size:12px; }
+    th, td { padding:8px; border-bottom:1px solid rgba(255,255,255,.08); vertical-align: top; }
+    th { text-align:left; opacity:.85; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:11px; }
+    .muted { opacity:.7; }
+  </style>
+</head>
+<body>
+<header>
+  <div style="font-weight:700;">FreightGuard — N30</div>
+  <div class="pill">PODER: Worker assíncrono</div>
+  <div class="pill">LEDGER: hash-chain</div>
+  <div class="pill">SNAPSHOT: localização+instante</div>
+</header>
+
+<main>
+  <div class="panel">
+
+    <div class="box">
+      <div style="font-weight:600;margin-bottom:6px;">Operação (origem/destino por clique)</div>
+      <div class="small" id="hintOp">Clique no mapa para definir <b>ORIGEM</b>. Depois clique para definir <b>DESTINO</b>.</div>
+
+      <div class="row">
+        <div>
+          <label>Valor da carga (R$)</label>
+          <input id="cargoValue" type="number" min="1" step="0.01" value="50000" />
+        </div>
+        <div>
+          <label>SLA (horas)</label>
+          <input id="slaHours" type="number" min="1" step="1" value="24" />
+        </div>
+      </div>
+
+      <label>Penalty (R$) em caso de falha/atraso</label>
+      <input id="penaltyValue" type="number" min="0" step="0.01" value="20000" />
+
+      <button id="submitOpBtn" disabled>Enviar comando (API aceita, Worker decide)</button>
+      <button id="resetOpBtn" class="secondary">Resetar origem/destino</button>
+
+      <div class="small" style="margin-top:10px;">
+        <div>Origem: <code id="o"></code></div>
+        <div>Destino: <code id="d"></code></div>
+      </div>
+    </div>
+
+    <div class="box">
+      <div style="font-weight:600;margin-bottom:6px;">Snapshot (um ponto + instante do worker)</div>
+      <div class="small" id="hintSnap">Clique no mapa para escolher um ponto e depois “Salvar snapshot”.</div>
+
+      <label>Nota (opcional)</label>
+      <input id="snapNote" type="text" maxlength="140" placeholder="ex: pátio / porto / cliente X" />
+
+      <button id="saveSnapBtn" disabled>Salvar snapshot (API aceita, Worker registra)</button>
+      <div class="small" style="margin-top:10px;">
+        <div>Ponto: <code id="s"></code></div>
+        <div class="muted">Inclui clima real (OWM) naquele ponto + timestamp do processamento.</div>
+      </div>
+    </div>
+
+    <div class="box">
+      <div style="font-weight:600;margin-bottom:6px;">Projeções (read-only)</div>
+      <div class="small">Status:
+        <span class="tag g">APPROVED</span>
+        <span class="tag y">APPROVED_WITH_COST</span>
+        <span class="tag r">BLOCKED</span>
+      </div>
+      <div class="small" style="margin-top:8px;">Orçamento hoje: <code id="budget"></code></div>
+    </div>
+
+    <div class="box">
+      <div style="font-weight:600;margin-bottom:8px;">Últimas operações</div>
+      <table>
+        <thead><tr><th>Status</th><th>Custo</th><th>Budget</th><th>Hash</th></tr></thead>
+        <tbody id="tblOps"></tbody>
+      </table>
+    </div>
+
+    <div class="box">
+      <div style="font-weight:600;margin-bottom:8px;">Últimos snapshots</div>
+      <table>
+        <thead><tr><th>Quando</th><th>Coords</th><th>Clima</th><th>Hash</th></tr></thead>
+        <tbody id="tblSnaps"></tbody>
+      </table>
+    </div>
+
+    <div class="box">
+      <div style="font-weight:600;margin-bottom:6px;">Auditoria (recompute)</div>
+      <button id="auditBtn">Rodar /api/audit/recompute</button>
+      <pre class="small" id="auditOut" style="white-space:pre-wrap;"></pre>
+    </div>
+
+  </div>
+
+  <div id="map"></div>
+</main>
+
+<script>
+  const api = (path, opts) => fetch("/api" + path, opts);
+
+  const state = {
+    opOrigin: null,
+    opDest: null,
+    snapPoint: null,
+    markers: []
+  };
+
+  const map = new maplibregl.Map({
+    container: "map",
+    style: "https://demotiles.maplibre.org/style.json",
+    center: [-43.938, -19.919],
+    zoom: 10
+  });
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+  function fmt(p){ return p ? `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}` : ""; }
+
+  function clearMarkers(){ state.markers.forEach(m => m.remove()); state.markers = []; }
+
+  function drawPoints(){
+    clearMarkers();
+    if (state.opOrigin) state.markers.push(new maplibregl.Marker({ color: "#8bffb0" }).setLngLat([state.opOrigin.lon, state.opOrigin.lat]).addTo(map));
+    if (state.opDest) state.markers.push(new maplibregl.Marker({ color: "#ffd48b" }).setLngLat([state.opDest.lon, state.opDest.lat]).addTo(map));
+    if (state.snapPoint) state.markers.push(new maplibregl.Marker({ color: "#9bb7ff" }).setLngLat([state.snapPoint.lon, state.snapPoint.lat]).addTo(map));
+  }
+
+  function setOpHint(){
+    const h = document.getElementById("hintOp");
+    if (!state.opOrigin) h.innerHTML = "Clique no mapa para definir <b>ORIGEM</b>.";
+    else if (!state.opDest) h.innerHTML = "Agora clique no mapa para definir <b>DESTINO</b>.";
+    else h.innerHTML = "Origem e destino definidos. Envie o comando.";
+    document.getElementById("submitOpBtn").disabled = !(state.opOrigin && state.opDest);
+  }
+
+  function setSnapHint(){
+    const h = document.getElementById("hintSnap");
+    if (!state.snapPoint) h.innerHTML = "Clique no mapa para escolher um ponto e depois “Salvar snapshot”.";
+    else h.innerHTML = "Ponto escolhido. Salve o snapshot.";
+    document.getElementById("saveSnapBtn").disabled = !state.snapPoint;
+  }
+
+  function setTexts(){
+    document.getElementById("o").textContent = fmt(state.opOrigin);
+    document.getElementById("d").textContent = fmt(state.opDest);
+    document.getElementById("s").textContent = fmt(state.snapPoint);
+    setOpHint();
+    setSnapHint();
+  }
+
+  // clique: prioriza completar a operação; snapshot é “o ponto atual”
+  map.on("click", (e) => {
+    const p = { lat: e.lngLat.lat, lon: e.lngLat.lng };
+
+    // sempre atualiza o “snap point” (um ponto)
+    state.snapPoint = p;
+
+    // operação: 2 cliques (origem/destino). terceiro clique reinicia origem.
+    if (!state.opOrigin) state.opOrigin = p;
+    else if (!state.opDest) state.opDest = p;
+    else { state.opOrigin = p; state.opDest = null; }
+
+    setTexts();
+    drawPoints();
+  });
+
+  document.getElementById("resetOpBtn").onclick = () => {
+    state.opOrigin = null; state.opDest = null;
+    setTexts(); drawPoints();
+  };
+
+  document.getElementById("submitOpBtn").onclick = async () => {
+    const body = {
+      origin: state.opOrigin,
+      destination: state.opDest,
+      cargoValue: Number(document.getElementById("cargoValue").value),
+      slaHours: Number(document.getElementById("slaHours").value),
+      penaltyValue: Number(document.getElementById("penaltyValue").value)
+    };
+    const r = await api("/commands/operations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const j = await r.json().catch(() => ({}));
+    alert(`ACCEPTED=${r.status} opId=${j.opId || "?"}
+Decisão virá do Worker (assíncrono).`);
+  };
+
+  document.getElementById("saveSnapBtn").onclick = async () => {
+    const body = {
+      lat: state.snapPoint.lat,
+      lon: state.snapPoint.lon,
+      note: document.getElementById("snapNote").value || null
+    };
+    const r = await api("/commands/location-snapshots", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const j = await r.json().catch(() => ({}));
+    alert(`ACCEPTED=${r.status} snapshotId=${j.snapshotId || "?"}
+Registro virá do Worker (timestamp+clima).`);
+  };
+
+  document.getElementById("auditBtn").onclick = async () => {
+    const r = await api("/audit/recompute");
+    document.getElementById("auditOut").textContent = JSON.stringify(await r.json(), null, 2);
+  };
+
+  function statusTag(decision){
+    if (decision === "APPROVED") return `<span class="tag g">APPROVED</span>`;
+    if (decision === "APPROVED_WITH_COST") return `<span class="tag y">APPROVED_WITH_COST</span>`;
+    return `<span class="tag r">BLOCKED</span>`;
+  }
+
+  async function refresh(){
+    try{
+      const b = await api("/projections/budget/today").then(r => r.json());
+      document.getElementById("budget").textContent = b.day ? `day=${b.day} left=${b.budget_left} total=${b.budget_total}` : "sem registro hoje";
+
+      const ops = await api("/projections/operations").then(r => r.json());
+      const tbOps = document.getElementById("tblOps");
+      tbOps.innerHTML = "";
+      for (const it of ops.items.slice(0, 30)){
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${statusTag(it.decision)}</td>
+          <td><code>${it.cost}</code></td>
+          <td><code>${it.budget_left}</code></td>
+          <td title="hash do evento"><code>${String(it.event_hash).slice(0, 12)}…</code></td>
+        `;
+        tbOps.appendChild(tr);
+      }
+
+      const snaps = await api("/projections/location-snapshots").then(r => r.json());
+      const tbSn = document.getElementById("tblSnaps");
+      tbSn.innerHTML = "";
+      for (const it of snaps.items.slice(0, 30)){
+        const when = it.captured_at ? String(it.captured_at).replace("T"," ").slice(0,19) : "?";
+        const coords = `${Number(it.lat).toFixed(4)}, ${Number(it.lon).toFixed(4)}`;
+        const wx = `t=${Number(it.wx_temp||0).toFixed(1)}°C w=${Number(it.wx_wind||0).toFixed(1)} r1h=${Number(it.wx_rain1h||0).toFixed(1)}`;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><code>${when}</code></td>
+          <td><code>${coords}</code></td>
+          <td><code>${wx}</code></td>
+          <td title="hash do evento"><code>${String(it.event_hash).slice(0, 12)}…</code></td>
+        `;
+        tbSn.appendChild(tr);
+      }
+    } catch(e){}
+  }
+
+  setTexts();
+  drawPoints();
+  refresh();
+  setInterval(refresh, 1500);
+</script>
+</body>
+</html>

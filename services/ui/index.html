@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>N30 FreightGuard</title>
+
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+  <style>
+    body { margin:0; font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Arial; background:#0b1020; color:#e8eefc; }
+    header { padding:12px 16px; display:flex; gap:12px; align-items:center; border-bottom:1px solid rgba(255,255,255,.08); }
+    .pill { padding:6px 10px; border:1px solid rgba(255,255,255,.12); border-radius:999px; font-size:12px; opacity:.95; }
+    main { display:grid; grid-template-columns: 440px 1fr; height: calc(100vh - 52px); }
+    .panel { padding:14px; border-right:1px solid rgba(255,255,255,.08); overflow:auto; }
+    .box { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.10); border-radius:12px; padding:12px; margin-bottom:12px; }
+    label { display:block; font-size:12px; opacity:.85; margin-top:10px; }
+    input { width:100%; margin-top:6px; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background:rgba(0,0,0,.25); color:#e8eefc; }
+    button { width:100%; margin-top:10px; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.08); color:#e8eefc; cursor:pointer; }
+    button:hover { background:rgba(255,255,255,.12); }
+    button.secondary { background:rgba(0,0,0,.22); }
+    button.inline { width:auto; margin-top:0; padding:8px 10px; border-radius:10px; }
+    #map { height:100%; width:100%; }
+    .small { font-size:12px; opacity:.85; line-height:1.35; }
+    .row { display:flex; gap:8px; }
+    .row > div { flex:1; }
+    .tag { display:inline-block; padding:4px 8px; border-radius:999px; border:1px solid rgba(255,255,255,.12); font-size:12px; }
+    .g { color:#8bffb0; border-color: rgba(139,255,176,.35); }
+    .y { color:#ffd48b; border-color: rgba(255,212,139,.35); }
+    .r { color:#ff8ba0; border-color: rgba(255,139,160,.35); }
+    table { width:100%; border-collapse: collapse; font-size:12px; }
+    th, td { padding:8px; border-bottom:1px solid rgba(255,255,255,.08); vertical-align: top; }
+    th { text-align:left; opacity:.85; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:11px; }
+    .muted { opacity:.7; }
+
+    /* Weather UI */
+    .wxgrid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px; }
+    .wxcard { background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.10); border-radius:12px; padding:10px; }
+    .wxhead { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+    .wxtitle { font-weight:650; font-size:12px; opacity:.95; }
+    .wxmeta { font-size:11px; opacity:.75; }
+    .wxline { display:flex; gap:8px; flex-wrap:wrap; }
+    .wxpill { font-size:11px; padding:4px 8px; border-radius:999px; border:1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); }
+    .wxpill strong { font-weight:700; }
+
+    /* Clickable rows */
+    tr.oprow { cursor:pointer; }
+    tr.oprow:hover { background: rgba(255,255,255,.06); }
+    tr.oprow.selected { background: rgba(155,183,255,.12); outline: 1px solid rgba(155,183,255,.35); }
+
+    /* Modal */
+    .modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9999; }
+    .modal { max-width: 920px; margin: 6vh auto; background: rgba(12,16,28,.98); border:1px solid rgba(255,255,255,.12); border-radius:16px; box-shadow: 0 20px 70px rgba(0,0,0,.55); overflow:hidden; }
+    .modal-head { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.10); }
+    .modal-title { font-weight:750; }
+    .modal-body { padding:14px; }
+    .modal-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    .modal-box { background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.10); border-radius:12px; padding:12px; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; padding:12px 14px; border-top:1px solid rgba(255,255,255,.10); }
+    .xbtn { width:auto; margin:0; padding:8px 10px; border-radius:10px; }
+    .prewrap { white-space:pre-wrap; overflow:auto; max-height: 45vh; }
+  </style>
+</head>
+<body>
+<header>
+  <div style="font-weight:700;">FreightGuard — N30</div>
+  <div class="pill">PODER: Worker assíncrono</div>
+  <div class="pill">LEDGER: hash-chain</div>
+  <div class="pill">SNAPSHOT: localização+instante</div>
+</header>
+
+<main>
+  <div class="panel">
+
+    <div class="box">
+      <div style="font-weight:600;margin-bottom:6px;">Operação (origem/destino por clique)</div>
+      <div class="small" id="hintOp">Clique no mapa para definir <b>ORIGEM</b>. Depois clique para definir <b>DESTINO</b>.</div>
+
+      <div class="row">
+        <div>
+          <label>Valor da carga (R$)</label>
+          <input id="cargoValue" type="number" min="1" step="0.01" value="50000" />
+        </div>
+        <div>
+          <label>SLA (horas)</label>
+          <input id="slaHours" type="number" min="1" step="1" value="24" />
+        </div>
+      </div>
+
+      <label>Penalty (R$) em caso de falha/atraso</label>
+      <input id="penaltyValue" type="number" min="0" step="0.01" value="20000" />
+
+      <button id="submitOpBtn" disabled>Enviar comando (API aceita, Worker decide)</button>
+      <button id="resetOpBtn" class="secondary">Resetar origem/destino</button>
+
+      <div class="small" style="margin-top:10px;">
+        <div>Origem: <code id="o"></code></div>
+        <div>Destino: <code id="d"></code></div>
+        <div class="muted" style="margin-top:6px;">Último opId enviado: <code id="lastOpId">—</code></div>
+      </div>
+    </div>
+
+    <div class="box">
+      <div style="font-weight:600;margin-bottom:6px;">Clima da operação (última decisão)</div>
+      <div class="small" id="wxHint">
+        Quando o Worker decidir, você verá aqui o clima real (OWM) de <b>ORIGEM</b> e <b>DESTINO</b> daquele opId.
+      </div>
+
+      <div class="small muted" style="margin-top:6px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div>Selecionado na tabela: <code id="wxSelectedOpId">—</code></div>
+        <button class="inline" id="openSelectedBtn" title="Abrir detalhes da operação selecionada">Abrir detalhes</button>
+      </div>
+
+      <div class="wxgrid">
+        <div class="wxcard">
+          <div class="wxhead">
+            <div class="wxtitle">Origem</div>
+            <div class="wxmeta" id="wxOriginAt">—</div>
+          </div>
+          <div class="small" id="wxOriginPlace">—</div>
+          <div class="wxline" style="margin-top:8px;" id="wxOriginPills"></div>
+        </div>
+
+        <div class="wxcard">
+          <div class="wxhead">
+            <div class="wxtitle">Destino</div>
+            <div class="wxmeta" id="wxDestAt">—</div>
+          </div>
+          <div class="small" id="wxDestPlace">—</div>
+          <div class="wxline" style="margin-top:8px;" id="wxDestPills"></div>
+        </div>
+      </div>
+
+      <div class="small" style="margin-top:10px;">
+        <div>Decisão: <code id="wxDecision">—</code> | Custo: <code id="wxCost">—</code> | Budget left: <code id="wxBudgetLeft">—</code></div>
+        <div class="muted" style="margin-top:6px;">Fonte: `origin_weather` / `dest_weather` no evento decidido.</div>
+      </div>
+    </div>
+
+    <div class="box">
+      <div style="font-weight:600;margin-bottom:6px;">Snapshot (um ponto + instante do worker)</div>
+      <div class="small" id="hintSnap">Clique no mapa para escolher um ponto e depois “Salvar snapshot”.</div>
+
+      <label>Nota (opcional)</label>
+      <input id="snapNote" type="text" maxlength="140" placeholder="ex: pátio / porto / cliente X" />
+
+      <button id="saveSnapBtn" disabled>Salvar snapshot (API aceita, Worker registra)</button>
+      <div class="small" style="margin-top:10px;">
+        <div>Ponto: <code id="s"></code></div>
+        <div class="muted">Inclui clima real (OWM) naquele ponto + timestamp do processamento.</div>
+      </div>
+    </div>
+
+    <div class="box">
+      <div style="font-weight:600;margin-bottom:6px;">Projeções (read-only)</div>
+      <div class="small">Status:
+        <span class="tag g">APPROVED</span>
+        <span class="tag y">APPROVED_WITH_COST</span>
+        <span class="tag r">BLOCKED</span>
+      </div>
+      <div class="small" style="margin-top:8px;">Orçamento hoje: <code id="budget"></code></div>
+    </div>
+
+    <div class="box">
+      <div style="font-weight:600;margin-bottom:8px;">Últimas operações</div>
+      <div class="small muted" style="margin-bottom:6px;">
+        Clique numa linha para fixar o “Clima da operação”. Clique de novo (ou use “Abrir detalhes”) para abrir o modal.
+      </div>
+      <table>
+        <thead><tr><th>Status</th><th>Custo</th><th>Budget</th><th>Hash</th></tr></thead>
+        <tbody id="tblOps"></tbody>
+      </table>
+    </div>
+
+    <div class="box">
+      <div style="font-weight:600;margin-bottom:8px;">Últimos snapshots</div>
+      <table>
+        <thead><tr><th>Quando</th><th>Coords</th><th>Clima</th><th>Hash</th></tr></thead>
+        <tbody id="tblSnaps"></tbody>
+      </table>
+      <div class="small muted" style="margin-top:8px;">
+        Se o endpoint de snapshots não existir, essa tabela fica vazia sem quebrar a UI.
+      </div>
+    </div>
+
+    <div class="box">
+      <div style="font-weight:600;margin-bottom:6px;">Auditoria (recompute)</div>
+      <button id="auditBtn">Rodar /api/audit/recompute</button>
+      <pre class="small" id="auditOut" style="white-space:pre-wrap;"></pre>
+    </div>
+
+  </div>
+
+  <!-- Modal: detalhes da operação -->
+  <div id="opModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="opModalTitle">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title" id="opModalTitle">Detalhes da operação</div>
+          <div class="small muted">opId: <code id="mOpId">—</code></div>
+        </div>
+        <button class="xbtn" id="mCloseBtn" title="Fechar">Fechar</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-grid">
+          <div class="modal-box">
+            <div style="font-weight:650; margin-bottom:8px;">Resumo</div>
+            <div class="small">Decisão: <code id="mDecision">—</code></div>
+            <div class="small">Custo: <code id="mCost">—</code></div>
+            <div class="small">Budget left: <code id="mBudgetLeft">—</code></div>
+            <div class="small">Criado em: <code id="mCreatedAt">—</code></div>
+            <div class="small">Hash: <code id="mHash">—</code></div>
+          </div>
+
+          <div class="modal-box">
+            <div style="font-weight:650; margin-bottom:8px;">Clima (origem/destino)</div>
+            <div class="small muted" style="margin-bottom:6px;">(mesmos campos do box principal)</div>
+
+            <div class="small"><b>Origem</b> — <span id="mOPlace">—</span> <span class="muted">| at:</span> <code id="mOAt">—</code></div>
+            <div class="small" id="mOPills" style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;"></div>
+
+            <div style="height:10px;"></div>
+
+            <div class="small"><b>Destino</b> — <span id="mDPlace">—</span> <span class="muted">| at:</span> <code id="mDAt">—</code></div>
+            <div class="small" id="mDPills" style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;"></div>
+          </div>
+        </div>
+
+        <div class="modal-box" style="margin-top:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+            <div style="font-weight:650;">JSON completo (projeção)</div>
+            <button class="inline" id="mCopyBtn" title="Copiar JSON para a área de transferência">Copiar JSON</button>
+          </div>
+          <pre class="prewrap" id="mJson" style="margin-top:10px;"></pre>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="inline secondary" id="mCloseBtn2">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+</main>
+
+<script>
+  const api = (path, opts) => fetch("/api" + path, opts);
+
+  const state = {
+    opOrigin: null,
+    opDest: null,
+    snapPoint: null,
+    markers: [],
+    lastOpId: null,
+    selectedOpId: null,
+    selectedOpObj: null
+  };
+
+  const map = new maplibregl.Map({
+    container: "map",
+    style: "https://demotiles.maplibre.org/style.json",
+    center: [-43.938, -19.919],
+    zoom: 10
+  });
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+  function fmt(p){ return p ? `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}` : ""; }
+
+  function clearMarkers(){ state.markers.forEach(m => m.remove()); state.markers = []; }
+
+  function drawPoints(){
+    clearMarkers();
+    if (state.opOrigin) state.markers.push(new maplibregl.Marker({ color: "#8bffb0" }).setLngLat([state.opOrigin.lon, state.opOrigin.lat]).addTo(map));
+    if (state.opDest) state.markers.push(new maplibregl.Marker({ color: "#ffd48b" }).setLngLat([state.opDest.lon, state.opDest.lat]).addTo(map));
+    if (state.snapPoint) state.markers.push(new maplibregl.Marker({ color: "#9bb7ff" }).setLngLat([state.snapPoint.lon, state.snapPoint.lat]).addTo(map));
+  }
+
+  function setOpHint(){
+    const h = document.getElementById("hintOp");
+    if (!state.opOrigin) h.innerHTML = "Clique no mapa para definir <b>ORIGEM</b>.";
+    else if (!state.opDest) h.innerHTML = "Agora clique no mapa para definir <b>DESTINO</b>.";
+    else h.innerHTML = "Origem e destino definidos. Envie o comando.";
+    document.getElementById("submitOpBtn").disabled = !(state.opOrigin && state.opDest);
+  }
+
+  function setSnapHint(){
+    const h = document.getElementById("hintSnap");
+    if (!state.snapPoint) h.innerHTML = "Clique no mapa para escolher um ponto e depois “Salvar snapshot”.";
+    else h.innerHTML = "Ponto escolhido. Salve o snapshot.";
+    document.getElementById("saveSnapBtn").disabled = !state.snapPoint;
+  }
+
+  function setTexts(){
+    document.getElementById("o").textContent = fmt(state.opOrigin);
+    document.getElementById("d").textContent = fmt(state.opDest);
+    document.getElementById("s").textContent = fmt(state.snapPoint);
+    document.getElementById("lastOpId").textContent = state.lastOpId || "—";
+    document.getElementById("wxSelectedOpId").textContent = state.selectedOpId || "—";
+    setOpHint();
+    setSnapHint();
+  }
+
+  function esc(s){
+    return String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function pill(label, value){
+    return `<span class="wxpill"><strong>${esc(label)}:</strong> ${esc(value)}</span>`;
+  }
+  function fmtWxPills(wx){
+    if (!wx) return "";
+    const parts = [];
+    if (wx.temp_c != null) parts.push(pill("Temp", `${Number(wx.temp_c).toFixed(1)}°C`));
+    if (wx.humidity_pct != null) parts.push(pill("Umid", `${Number(wx.humidity_pct).toFixed(0)}%`));
+    if (wx.wind_ms != null) parts.push(pill("Vento", `${Number(wx.wind_ms).toFixed(1)} m/s`));
+    if (wx.gust_ms != null) parts.push(pill("Raj", `${Number(wx.gust_ms).toFixed(1)} m/s`));
+    if (wx.rain_1h_mm != null) parts.push(pill("Chuva 1h", `${Number(wx.rain_1h_mm).toFixed(1)} mm`));
+    if (wx.clouds_pct != null) parts.push(pill("Nuvens", `${Number(wx.clouds_pct).toFixed(0)}%`));
+    if (wx.conditions) parts.push(pill("Condição", wx.conditions));
+    return parts.join("");
+  }
+
+  function setWxBox(op){
+    const hint = document.getElementById("wxHint");
+
+    if (!op) {
+      hint.innerHTML = "Envie uma operação para ver aqui o clima da decisão do Worker.";
+      document.getElementById("wxOriginAt").textContent = "—";
+      document.getElementById("wxDestAt").textContent = "—";
+      document.getElementById("wxOriginPlace").textContent = "—";
+      document.getElementById("wxDestPlace").textContent = "—";
+      document.getElementById("wxOriginPills").innerHTML = "";
+      document.getElementById("wxDestPills").innerHTML = "";
+      document.getElementById("wxDecision").textContent = "—";
+      document.getElementById("wxCost").textContent = "—";
+      document.getElementById("wxBudgetLeft").textContent = "—";
+      return;
+    }
+
+    const ow = op.origin_weather || null;
+    const dw = op.dest_weather || null;
+
+    if (!ow && !dw) {
+      hint.innerHTML = `OpId <code>${esc(op.op_id)}</code> ainda sem clima (aguardando decisão do Worker).`;
+    } else {
+      hint.innerHTML = `Mostrando clima persistido no evento decidido do opId <code>${esc(op.op_id)}</code>.`;
+    }
+
+    document.getElementById("wxDecision").textContent = op.decision ?? "—";
+    document.getElementById("wxCost").textContent = op.cost ?? "—";
+    document.getElementById("wxBudgetLeft").textContent = op.budget_left ?? "—";
+
+    document.getElementById("wxOriginAt").textContent = ow?.at ? String(ow.at) : "—";
+    document.getElementById("wxDestAt").textContent = dw?.at ? String(dw.at) : "—";
+    document.getElementById("wxOriginPlace").textContent = ow?.place ? `${ow.place}${ow.country ? " ("+ow.country+")" : ""}` : "—";
+    document.getElementById("wxDestPlace").textContent = dw?.place ? `${dw.place}${dw.country ? " ("+dw.country+")" : ""}` : "—";
+    document.getElementById("wxOriginPills").innerHTML = fmtWxPills(ow);
+    document.getElementById("wxDestPills").innerHTML = fmtWxPills(dw);
+  }
+
+  // Modal helpers
+  function showModal(op){
+    if (!op) return;
+    const el = document.getElementById("opModal");
+    el.style.display = "block";
+    el.setAttribute("aria-hidden", "false");
+
+    document.getElementById("mOpId").textContent = op.op_id ?? "—";
+    document.getElementById("mDecision").textContent = op.decision ?? "—";
+    document.getElementById("mCost").textContent = op.cost ?? "—";
+    document.getElementById("mBudgetLeft").textContent = op.budget_left ?? "—";
+    document.getElementById("mCreatedAt").textContent = op.created_at ?? "—";
+    document.getElementById("mHash").textContent = op.event_hash ?? "—";
+
+    const ow = op.origin_weather || null;
+    const dw = op.dest_weather || null;
+
+    document.getElementById("mOAt").textContent = ow?.at ? String(ow.at) : "—";
+    document.getElementById("mDAt").textContent = dw?.at ? String(dw.at) : "—";
+
+    document.getElementById("mOPlace").textContent =
+      ow?.place ? `${ow.place}${ow.country ? " ("+ow.country+")" : ""}` : "—";
+    document.getElementById("mDPlace").textContent =
+      dw?.place ? `${dw.place}${dw.country ? " ("+dw.country+")" : ""}` : "—";
+
+    document.getElementById("mOPills").innerHTML = fmtWxPills(ow);
+    document.getElementById("mDPills").innerHTML = fmtWxPills(dw);
+
+    document.getElementById("mJson").textContent = JSON.stringify(op, null, 2);
+
+    // foco pro "Fechar"
+    document.getElementById("mCloseBtn").focus();
+  }
+
+  function hideModal(){
+    const el = document.getElementById("opModal");
+    el.style.display = "none";
+    el.setAttribute("aria-hidden", "true");
+  }
+
+  document.getElementById("mCloseBtn").onclick = hideModal;
+  document.getElementById("mCloseBtn2").onclick = hideModal;
+
+  document.getElementById("opModal").addEventListener("click", (e) => {
+    // clique no backdrop (fora do modal) fecha
+    if (e.target && e.target.id === "opModal") hideModal();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") hideModal();
+  });
+
+  document.getElementById("mCopyBtn").onclick = async () => {
+    try{
+      const txt = document.getElementById("mJson").textContent || "";
+      await navigator.clipboard.writeText(txt);
+      alert("JSON copiado.");
+    } catch(e){
+      alert("Falhou ao copiar (permissão do browser).");
+    }
+  };
+
+  document.getElementById("openSelectedBtn").onclick = () => {
+    if (state.selectedOpObj) showModal(state.selectedOpObj);
+    else alert("Selecione uma operação na tabela primeiro.");
+  };
+
+  // clique: prioriza completar a operação; snapshot é “o ponto atual”
+  map.on("click", (e) => {
+    const p = { lat: e.lngLat.lat, lon: e.lngLat.lng };
+
+    state.snapPoint = p;
+
+    if (!state.opOrigin) state.opOrigin = p;
+    else if (!state.opDest) state.opDest = p;
+    else { state.opOrigin = p; state.opDest = null; }
+
+    setTexts();
+    drawPoints();
+  });
+
+  document.getElementById("resetOpBtn").onclick = () => {
+    state.opOrigin = null; state.opDest = null;
+    setTexts(); drawPoints();
+  };
+
+  document.getElementById("submitOpBtn").onclick = async () => {
+    const body = {
+      origin: state.opOrigin,
+      destination: state.opDest,
+      cargoValue: Number(document.getElementById("cargoValue").value),
+      slaHours: Number(document.getElementById("slaHours").value),
+      penaltyValue: Number(document.getElementById("penaltyValue").value)
+    };
+    const r = await api("/commands/operations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const j = await r.json().catch(() => ({}));
+
+    state.lastOpId = j.opId || null;
+    setTexts();
+
+    alert(`ACCEPTED=${r.status} opId=${j.opId || "?"}
+Decisão virá do Worker (assíncrono).`);
+  };
+
+  document.getElementById("saveSnapBtn").onclick = async () => {
+    const body = {
+      lat: state.snapPoint.lat,
+      lon: state.snapPoint.lon,
+      note: document.getElementById("snapNote").value || null
+    };
+    const r = await api("/commands/location-snapshots", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const j = await r.json().catch(() => ({}));
+    alert(`ACCEPTED=${r.status} snapshotId=${j.snapshotId || "?"}
+Registro virá do Worker (timestamp+clima).`);
+  };
+
+  document.getElementById("auditBtn").onclick = async () => {
+    const r = await api("/audit/recompute");
+    document.getElementById("auditOut").textContent = JSON.stringify(await r.json(), null, 2);
+  };
+
+  function statusTag(decision){
+    if (decision === "APPROVED") return `<span class="tag g">APPROVED</span>`;
+    if (decision === "APPROVED_WITH_COST") return `<span class="tag y">APPROVED_WITH_COST</span>`;
+    return `<span class="tag r">BLOCKED</span>`;
+  }
+
+  function pickWxTarget(ops){
+    if (!ops || !ops.items || !ops.items.length) return null;
+
+    if (state.selectedOpId) {
+      const hit = ops.items.find(x => x.op_id === state.selectedOpId);
+      if (hit) return hit;
+    }
+
+    if (state.lastOpId) {
+      const hit = ops.items.find(x => x.op_id === state.lastOpId);
+      if (hit) return hit;
+    }
+
+    return ops.items[0] || null;
+  }
+
+  async function refresh(){
+    try{
+      const b = await api("/projections/budget/today").then(r => r.json());
+      document.getElementById("budget").textContent = b.day ? `day=${b.day} left=${b.budget_left} total=${b.budget_total}` : "sem registro hoje";
+
+      const ops = await api("/projections/operations").then(r => r.json());
+      const tbOps = document.getElementById("tblOps");
+      tbOps.innerHTML = "";
+
+      const wxTarget = pickWxTarget(ops);
+      state.selectedOpObj = wxTarget || null;
+      setWxBox(wxTarget);
+
+      // render linhas
+      for (const it of ops.items.slice(0, 30)){
+        const tr = document.createElement("tr");
+        tr.className = "oprow" + (it.op_id === state.selectedOpId ? " selected" : "");
+        tr.dataset.opid = it.op_id;
+
+        tr.innerHTML = `
+          <td>${statusTag(it.decision)}</td>
+          <td><code>${esc(it.cost)}</code></td>
+          <td><code>${esc(it.budget_left)}</code></td>
+          <td title="hash do evento"><code>${esc(String(it.event_hash || "").slice(0, 12))}…</code></td>
+        `;
+
+        tr.onclick = () => {
+          const same = (state.selectedOpId === it.op_id);
+          state.selectedOpId = it.op_id;
+          state.selectedOpObj = it;
+          setTexts();
+          setWxBox(it);
+
+          // re-highlight sem esperar próximo refresh
+          [...tbOps.querySelectorAll("tr.oprow")].forEach(row => {
+            row.classList.toggle("selected", row.dataset.opid === it.op_id);
+          });
+
+          // se clicar na mesma linha de novo, abre detalhes
+          if (same) showModal(it);
+        };
+
+        tbOps.appendChild(tr);
+      }
+
+      // snapshots: pode não existir neste build — não quebra
+      try{
+        const snaps = await api("/projections/location-snapshots").then(r => r.json());
+        const tbSn = document.getElementById("tblSnaps");
+        tbSn.innerHTML = "";
+        for (const it of (snaps.items || []).slice(0, 30)){
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td><code>${esc(String(it.created_at || "").slice(0,19).replace("T"," "))}</code></td>
+            <td><code>${Number(it.lat).toFixed(5)}, ${Number(it.lon).toFixed(5)}</code></td>
+            <td><code>${esc(it.conditions || "")} ${it.temp_c != null ? (Number(it.temp_c).toFixed(1)+"°C") : ""}</code></td>
+            <td><code>${esc(String(it.event_hash || "").slice(0, 12))}…</code></td>
+          `;
+          tbSn.appendChild(tr);
+        }
+      } catch(_) {}
+    } catch(e) {
+      // silencioso: UI não deve travar por falha transitória
+    }
+  }
+
+  setTexts();
+  setInterval(refresh, 1500);
+  refresh();
+</script>
+</body>
+</html>

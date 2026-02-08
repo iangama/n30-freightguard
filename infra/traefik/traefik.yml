@@ -1,0 +1,28 @@
+entryPoints:
+  traefik:
+    address: ":8080"
+  web:
+    address: ":8880"
+  websecure:
+    address: ":8443"
+
+api:
+  dashboard: true
+
+  insecure: true
+providers:
+  docker:
+    exposedByDefault: false
+    network: n30_freightguard_net
+    constraints: "Label(`fg.stack`,`n30-freightguard`)"
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: ${ACME_EMAIL}
+      storage: /letsencrypt/acme.json
+      httpChallenge:
+        entryPoint: web
+
+log:
+  level: INFO

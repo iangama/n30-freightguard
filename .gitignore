@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+
+# secrets MUST NOT be committed
+secrets/
+secrets/*.txt
+
+# local volumes / junk
+**/*.log
+letsencrypt/
