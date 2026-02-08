@@ -243,5 +243,7 @@ Ele não tenta ser um produto comercial completo. Ele tenta ser honesto sobre o 
 Status
 
 Projeto funcional, voltado para demonstração arquitetural e de produto.
+> As imagens abaixo mostram o produto rodando com dados reais,
+> decisões assíncronas e histórico auditável.
 <img width="1919" height="971" alt="Prova1" src="https://github.com/user-attachments/assets/1d9ba517-4e2b-4ac7-8546-195203c3f852" />
 <img width="1913" height="932" alt="Prova2" src="https://github.com/user-attachments/assets/61d1ae96-d9fe-4cbf-b2ce-2970164d364d" />
